@@ -1,0 +1,1351 @@
+---
+title: "MAP566 - Homework assignment"
+authors:
+  - "Emiliano Pizaña Vela"
+  - "Henri Chevreux"
+  - "Alfonso Mateos Vicente"
+  - "Charles de Monchy"
+format:
+  html:
+    paged: true
+    self-contained: true
+    theme: [cosmo, theme.scss]
+    toc: true
+    number-sections: true
+    html-math-method: katex
+    code-copy: true
+    code-summary: "Show the code"
+    code-overflow: wrap
+  pdf:
+    toc: true
+    number-sections: true
+    latex-engine: xelatex
+---
+
+# Single comparison
+
+```{r warning=FALSE}
+library(readr)
+setwd("/Users/charles/Desktop/STUDY/Polytechnique - MScT AI & VC/Courses/M1/S2/Statistics in Action/group_project/data")
+NHANES <- read.csv("NHANES_age_prediction 3.csv")
+data = NHANES[,c("DIQ010","age_group","RIDAGEYR","RIAGENDR","PAQ605","BMXBMI","LBXGLU","LBXGLT","LBXIN")]
+colnames(data) = c("Diabete","age_group","Age","Sex","Phys_activ","BMI","Glu","Glu2h","BIL")
+```
+
+We study data from the National Health and Nutrition Examination Survey (NHANES), administered by the Centers for Disease Control and Prevention (CDC), which collects extensive health and nutritional information from a diverse U.S. population.
+
+```{r}
+rmarkdown::paged_table(data)
+```
+
+The variables under study are :
+
+-   `Diabete`: diabete diagnosis (1: Yes, 2: No, 3: Borderline);
+-   `age_group` : age group of respondent ("Adult" or "Senior");
+-   `Age` : the age of respondent;
+-   `Sex`: sex of respondent (1: Male, 2: Female);
+-   `Physical activity`: respondent's answer to the question "Does your work involve vigorous-intensity activity that causes large increases in breathing or heart rate like carrying or lifting heavy loads, digging or construction work for at least 10 minutes continuously? (1: Yes, 2: No, 7: no answer);
+-   `BMI` : Body Mass Index if respondent ($kg/m^{2}$);
+-   `Glu` : Respondent's Blood Glucose after fasting ($mg/dL$);
+-   `Glu2h` : Respondent's Two Hours Blood Glucose ($mg/dL$);
+-   `BIL` : Respondent's Blood Insulin Level ($pmol/L$).
+
+------------------------------------------------------------------------
+
+1.  Test if the mean level of blood glucose after fasting is the same for diabetic and non diabetic respondents (*hint:* plot first the data and justify the test(s) to use).
+
+First, let us define the null hypothesis that we want to find out in this exercise: $$H_0: \mu_\text{Diabetic} = \mu_\text{Non-Diabetic}$$
+
+```{r}
+diabetic <- data$Glu[data$Diabete == 1]
+non_diabetic <- data$Glu[data$Diabete == 2]
+
+library(dplyr)
+data %>% group_by(Diabete) %>% 
+  summarise('average glucose' = mean(Glu), count = n()) %>% 
+  rmarkdown::paged_table()
+```
+
+We can see that there are three types of diabetes here, those who have diabetes, those who do not, and those who do not know well or are on the borderline, group 3, the latter group we should not take into account in our analysis.
+
+```{r}
+data <- data %>% filter(Diabete %in% c(1,2))
+data$Diabete <- factor(data$Diabete, levels = c(1, 2), labels = c("Diabetic", "Non-Diabetic"))
+```
+
+Let's visualise the data with a box plot to see where the mean lies in each data set and see what to expect at the end of the exercise.
+
+```{r}
+library(ggplot2)
+ggplot(data %>% filter(Diabete %in% c("Diabetic", "Non-Diabetic")), aes(x = Diabete, y = Glu, fill = Diabete)) +
+  geom_boxplot() +
+  labs(title = "Blood Glucose Levels by Diabetes Status", x = "Diabetes Status", y = "Fasting Blood Glucose (mg/dL)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue")) +
+  theme(legend.position = "none")
+```
+
+Looking at the boxplot, we can see that there is some difference between the means, this is not enough evidence, we are going to test to see if we could indeed reject the null hypothesis $H_0$ by doing some statistical tests, first let's see if our data are distributed under a normal distribution. This will give us information on whether to perform a t-Student test, as this assumes normality in the data; otherwise, we will choose to do a Wilcoxon test.
+
+```{r}
+ggplot(data %>% filter(Diabete %in% c("Diabetic", "Non-Diabetic")), aes(x = Glu, fill = Diabete)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of Blood Glucose Levels", x = "Fasting Blood Glucose (mg/dL)", y = "Density") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue"))
+```
+
+Taking a look at the plots, although from a distance it seems that we could assume normality, we can see that the diabetic density plot has a strange behaviour on the right. In addition, the blue one is also a bit strange. These are empirical results, so let's make a Q-Q plot to verify our hypothesis.
+
+```{r}
+library(ggplot2)
+data %>% filter(Diabete=="Diabetic") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+data %>% filter(Diabete=="Non-Diabetic") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+```
+
+After the Q-Q plot we can see that indeed it seems that we cannot assume normality. To verify, let's run a Shapiro-wilk test.
+
+```{r}
+shapiro_test_diabetic <- shapiro.test(data$Glu[data$Diabete == "Diabetic"])
+shapiro_test_nondiabetic <- shapiro.test(data$Glu[data$Diabete == "Non-Diabetic"])
+shapiro_test_diabetic
+shapiro_test_nondiabetic
+```
+
+Indeed, in both cases, the p-value is less than 0.05 so we cannot assume normality. Therefore, instead of performing a t-Student test, we are going to perform a Wilcoxon test that only assumes that the variables are independent.
+
+```{r}
+wilcox.test(Glu ~ Diabete, data = data)
+```
+
+We see that the resulting p-value is $7.908e-06 << 0.05$, therefore we can conclude that the data provide sufficient statistical evidence to reject the null hypothesis $H_0$, i.e. statistically, the means of the two populations are different.
+
+------------------------------------------------------------------------
+
+2.  Test for the diabetic respondents if the mean level of blood glucose after fasting is the same for adults and seniors.
+
+As we did in the previous exercise, let us first define the null hypothesis: $$H_0 : \mu_\text{adults} = \mu_\text{seniors}$$
+
+```{r}
+diab_data <- data %>% filter(Diabete == "Diabetic")
+table(diab_data$age_group)
+```
+
+As we did before, we are going to visualize the box plot and the density plots.
+
+```{r}
+ggplot(diab_data %>% filter(age_group %in% c("Adult", "Senior")), aes(x = age_group, y = Glu, fill = age_group)) +
+  geom_boxplot() +
+  labs(title = "Blood Glucose Levels by Diabetes Status", x = "Adult/Senior", y = "Fasting Blood Glucose (mg/dL)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue")) +
+  theme(legend.position = "none")
+
+ggplot(diab_data %>% filter(age_group %in% c("Adult", "Senior")), aes(x = Glu, fill = age_group)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of Blood Glucose Levels", x = "Fasting Blood Glucose (mg/dL)", y = "Density") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue"))
+
+```
+
+We can see that in this case, the amount of data we have is very small. With this amount we cannot really study normality effectively, but we will still make the Q-Q graph and the Shapiro test to see if we could assume normality. Looking at the box plot, we can already say that the average seems to vary a little, but in this case, since we have so little data, it is likely that the tests are inconclusive.
+
+```{r}
+diab_data %>% filter(age_group=="Adult") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+diab_data %>% filter(age_group=="Senior") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+
+shapiro_test_adult <- shapiro.test(diab_data$Glu[diab_data$age_group == "Adult"])
+shapiro_test_senior <- shapiro.test(diab_data$Glu[diab_data$age_group == "Senior"])
+
+shapiro_test_adult
+shapiro_test_senior
+```
+
+We can see that in the case of adults we cannot assume normality according to the Shapiro, but we must take into account that there is a lot of data. Therefore, we are not going to assume normality and we are going to carry out a Wilcoxon study.
+
+```{r}
+wilcox_test_result <- wilcox.test(Glu ~ age_group, data = diab_data, exact = FALSE)
+wilcox_test_result
+```
+
+As we had predicted, the p-value is greater than 0.05, which means that we cannot reject $H_0$, that is, we do not have enough statistical evidence to say that the means are not equal.
+
+------------------------------------------------------------------------
+
+3.  Is it possible to test for the adults diabetic respondents if the mean level of blood glucose after fasting is the same for those who have a vigorous work activity and for those who have not?
+
+First, let us define the null hypothesis that we want to find out in this exercise: $$H_0: \mu_\text{Physically-Active} = \mu_\text{Sedentary}$$
+
+```{r}
+data$Phys_activ <- factor(data$Phys_activ, levels = c(1, 2), labels = c("Physically-Active", "Sedentary"))
+data_phys <- data %>% filter(Diabete == "Diabetic", Phys_activ %in% c("Physically-Active", "Sedentary"))
+table(data_phys$Phys_activ)
+```
+
+Let's visualize the data:
+
+```{r}
+ggplot(data_phys %>% filter(Phys_activ %in% c("Physically-Active", "Sedentary")), aes(x = age_group, y = Glu, fill = age_group)) +
+  geom_boxplot() +
+  labs(title = "Blood Glucose Levels by Diabetes Status", x = "Physical activity", y = "Fasting Blood Glucose (mg/dL)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue")) +
+  theme(legend.position = "none")
+
+ggplot(data_phys %>% filter(Phys_activ %in% c("Physically-Active", "Sedentary")), aes(x = Glu, fill = Phys_activ)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of Blood Glucose Levels", x = "Fasting Blood Glucose (mg/dL)", y = "Density") +
+  theme_minimal() +
+  scale_fill_manual(values = c("red", "blue"))
+
+```
+
+The same thing happens as with the previous exercise, we are faced with a problem where we have very little data. In this case, where we have very little data (only 6 data in one of them), we are going to see the power of performing a t-Student test.
+
+```{r}
+library(pwr)
+res_pwr <- pwr.t.test(n = 6, 
+                            d = 0.5, 
+                            sig.level = 0.05, 
+                            power = NULL, 
+                            type = "two.sample",
+                            alternative = "two.sided")
+print(res_pwr)
+res_pwr <- pwr.t.test(n = 15, 
+                            d = 0.5, 
+                            sig.level = 0.05, 
+                            power = NULL, 
+                            type = "two.sample",
+                            alternative = "two.sided")
+print(res_pwr)
+```
+
+As we can see, in the case of the 6-data test, the power of the test is very small. So we really have to take the information it gives us with a grain of salt. Note that this is a t-Student test, for our analysis we are not going to assume normality and we will perform a Wilcoxon test, but its power is still very low anyway.
+
+```{r}
+
+data_phys %>% filter(Phys_activ=="Physically-Active") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+data_phys %>% filter(Phys_activ=="Sedentary") %>% 
+  ggplot() + aes(sample=Glu) + stat_qq() +  stat_qq_line()
+
+shapiro_test_adult <- shapiro.test(data_phys$Glu[data_phys$Phys_activ == "Physically-Active"])
+shapiro_test_senior <- shapiro.test(data_phys$Glu[data_phys$Phys_activ == "Sedentary"])
+
+shapiro_test_adult
+shapiro_test_senior
+
+```
+
+With this we verify that we cannot assume anything like normality.
+
+```{r}
+wilcox_test_phys_act <- wilcox.test(Glu ~ Phys_activ, data = data_phys, exact = FALSE)
+
+print(wilcox_test_phys_act)
+```
+
+We can see that the p-value is indeed greater than 0.05, so we cannot reject hypothesis $H_0$. Note that even if we had gotten something less than 0.05, we would have said the same thing since the number of data is really small.
+
+------------------------------------------------------------------------
+
+4.  Test if the proportion of diabetic is the same for male and female respondents. Compare conclusions of several tests. You can use the function `table` to compute contingency tables.
+
+Let us first define the null hypothesis: $$H_0 : p_\text{male} = p_\text{female}$$
+
+```{r}
+data_sub <- data %>% filter(Diabete %in% c("Diabetic", "Non-Diabetic"))
+
+contingency_table <- table(data_sub$Sex, data_sub$Diabete)
+contingency_table
+
+```
+
+First of all, as we usually do, we are going to see empirically if the processes
+
+```{r}
+male_diabetic   <- contingency_table[1, 1] 
+female_diabetic <- contingency_table[2, 1] 
+
+male_total   <- sum(contingency_table[1,])
+female_total <- sum(contingency_table[2,])
+
+print(paste("Male:", male_diabetic/male_total))
+print(paste("Female:", female_diabetic/female_total))
+```
+
+We can observe that the proportions are indeed similar, they only diverge by 0.4% empirically, so at first glance we could say that we could not reject that they have the same proportion. We will perform a Chi Squared test and a Fisher exact test to verify this hypothesis.
+
+```{r}
+chi_sq_result <- chisq.test(contingency_table)
+print(chi_sq_result)
+
+fisher_result <- fisher.test(contingency_table)
+print(fisher_result)
+```
+
+Indeed, the p-values in both cases are considerably larger than 0.05, therefore, as we had predicted, we do not have sufficient statistical evidence to be able to reject the null hypothesis, that is, we cannot say that the proportions do not match.
+
+----
+----
+# Gene expression data
+
+The *liver* dataset contains measurements of rat liver toxicity levels (measured through cholesterol levels) as well as measurements of the expression levels of several thousand genes.
+
+When loading the data (file `liver_data.rda`), the table *liver* is created with 64 rows (the observations) and 3117 columns. The data can be loaded using the following code:
+
+```{r}
+
+load("/Users/charles/Desktop/STUDY/Polytechnique - MScT AI & VC/Courses/M1/S2/Statistics in Action/group_project/data/liver_data.rda")
+```
+
+The first column, `cholesterol`, is the variable to be explained. The remaining 3116 are the expressions of 3116 genes (more precisely, the logarithm of the ratio between expression levels in two experimental conditions). The aim is to identify the variables (and therefore the genes) linked to the response.
+
+1.  We first want to study the gene which is the most correlated with the level of cholesterol. Identify this gene and plot `cholesterol` as a function of this gene expression level. Fit a linear model. Test if there is a significant relation between this gene expression and `cholesterol`?
+
+```{r}
+# Calculate correlation between cholesterol and each gene expression
+correlations <- sapply(2:ncol(liver), function(i) {
+  cor(liver$cholesterol, liver[,i], use="complete.obs")
+})
+
+# Find strongest correlation gene
+max_cor_index <- which.max(abs(correlations))
+max_cor_gene <- colnames(liver)[max_cor_index + 1]
+max_cor_value <- correlations[max_cor_index]
+
+# Plot relationship
+plot(liver[,max_cor_gene], liver$cholesterol, 
+     main=paste("Cholesterol vs", max_cor_gene),
+     xlab="Gene Expression", ylab="Cholesterol")
+
+# Fit linear model
+model <- lm(cholesterol ~ liver[,max_cor_gene], data=liver)
+abline(model, col="red")
+
+# model summary 
+summary_model <- summary(model)
+print(summary_model)
+```
+
+The extreme small p-value (6.314e-12) indicates a very high significant relationship between the gene expression and cholosterol levels. We can confidently reject the null hypothesis of no relationship.
+
+The positive coefficient (64.859) shows that increased expression of this gene is associated with higher cholesterol levels.
+
+The R-squared of 0.5358 shows that this single gene explains over 50% of the cholesterol which is a significant amount for a biological relationship.
+
+------------------------------------------------------------------------
+
+2.  We now wish to perform the previous test for all of the 3116 genes. For each of the genes, fit a linear model that explains `cholesterol` as a function of the gene expression and compute the $p$-value of the test.
+
+```{r}
+# Initialize vector to store p-values
+pvalues <- numeric(ncol(liver) - 1)
+gene_names <- colnames(liver)[-1]
+
+# For each gene, fit a linear model and extract p-value
+for (i in 1:length(pvalues)) {
+  # Create formula using specific column
+  gene_name <- gene_names[i]
+  formula <- as.formula(paste("cholesterol ~", gene_name))
+  
+  # Fit model and extract p-value for gene coefficient
+  model <- lm(formula, data=liver)
+  pvalues[i] <- summary(model)$coefficients[2, 4]
+}
+```
+
+------------------------------------------------------------------------
+
+3.  Order the $p$-values and plot the ordered $p$-values as a function of their rank. On the same plot, display the line $y = x/3116$. Discuss the result.
+
+```{r}
+# Order p-values
+ordered_pvalues <- sort(pvalues)
+ranks <- 1:length(ordered_pvalues)
+
+# Plot ordered p-values vs ranks
+plot(ranks, ordered_pvalues, 
+     main="Ordered p-values vs Rank", 
+     xlab="Rank", ylab="p-value",
+     pch=19, cex=0.7)
+
+# Add line y = x/3116 (BH threshold line)
+abline(0, 1/3116, col="red", lwd=2)
+```
+
+The plot shows the ordered p-values from all the genes tested against their rank. It can be seen that a lot of the p-values (especially the first 1000) are way smaller than we would expect by chance, which means a lot of genes are probably related to cholesterol.
+
+The red line (y=x/3116) is the Benjamini-Hochberg treshold. When p-values fall below this line, they are significant according to the BH-procedure. This helps us identify which genes are meaningful discoveries while controling the false discovery rate.
+
+The fact that many data points fall below the line indicates that cholesterol levels are probably influenced by a wide range of genes rather than just a few. This aligns with the biological understanding that metabolic traits typically arise from the combined effects of numerous genes working together.
+
+------------------------------------------------------------------------
+
+4.  Identify a set of genes linked to the response (*aka* discoveries). We want to guarantee that the expected proportion of false discoveries (mistakes) is less than $5\%$. Explain how you proceed and how many genes you discover.
+
+```{r}
+# Apply BH procedure to control FDR at 5%
+alpha <- 0.05
+m <- length(pvalues)
+
+# Order gene names according to p-values
+ordered_indices <- order(pvalues)
+ordered_pvalues <- pvalues[ordered_indices]
+ordered_genes <- gene_names[ordered_indices]
+
+# Find largest k such that P(k) ≤ (k/m)α
+BH_thresholds <- (1:m)/m * alpha
+significant <- ordered_pvalues <= BH_thresholds
+if(any(significant)) {
+  cutoff_index <- max(which(significant))
+  discoveries_BH <- ordered_genes[1:cutoff_index]
+  cat("Number of discovered genes (FDR < 5%):", length(discoveries_BH), "\n")
+} else {
+  cat("No genes discovered using BH procedure\n")
+}
+```
+
+To identify the genes linked to cholesterol levels while controlling the false discovery rate (FDR) at 5%, the Benjamin-Hochberg procedure can be applied to the gene tests. FDR allows us to make a reasonable number of false discoveries as long as they represent a small proportion of our total discoveries.
+
+I followed the following procedure:
+
+1.  Ordered all the p-values from small to large
+2.  for each rank, calculate the BH treshhold
+3.  find the largest rank k where p-value is smaller or equal to this treshhold
+4.  Genes 1 to k are significant
+
+This resulted in 941 genes being identified as significantly associated with cholesterol levels, we expect around 47 (5%) false discoveries among our 941 significant genes.
+
+------------------------------------------------------------------------
+
+5.  We wish to be more conservative and guarantee that the probability of making a false discovery (or more) is less than $5\%$. Explain how you proceed and how many genes you discover.
+
+```{r}
+bonferroni_threshold <- alpha/m
+significant_bonferroni <- ordered_pvalues <= bonferroni_threshold
+discoveries_bonferroni <- ordered_genes[significant_bonferroni]
+
+cat("Number of discovered genes using Bonferroni correction (FWER < 5%):", 
+    length(discoveries_bonferroni), "\n")
+```
+
+For this analysis, I applied the Bonferroni correction, this controls the Family-Wise Error Rate (FWER) at 5%. FWER represents the probability of making even one false discovery across all our tests, unlike FDR which tolerates a proportion of errors.
+
+To implement Bonferroni, I divided our significance threshold (α = 0.05) by the total number of tests (m = 3116), giving us a much stricter threshold of 0.05/3116 = 1.6e-5.
+
+While the BH procedure identified 941 significant genes, Bonferroni found only 220. The difference shows how much more conservative Bonferroni is.
+
+----
+----
+
+# Non parametric regression
+
+```{r test-config2, message = FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(parallel)
+library(purrr)
+```
+
+This project explores different regression techniques to model relationships in the provided dataset. We'll begin by visualizing the data, then fit polynomial models of varying degrees to identify the optimal complexity. Next, we'll implement nonlinear regression and compare its performance with our selected polynomial model. Finally, we'll calculate confidence and prediction intervals at specific covariate values to quantify the uncertainty in our estimates.
+
+1. Upload the dataset and plot the data.
+
+```{r setup}
+file_path <- file_path <- "/Users/charles/Desktop/STUDY/Polytechnique - MScT AI & VC/Courses/M1/S2/Statistics in Action/group_project/data/data_exo3.csv" 
+data <- read.csv(file_path, sep = "t", header = TRUE)
+
+#Convert data as numeric, it was separated by comas
+data$x <- as.numeric(gsub(",", ".", data$x))
+data$y <- as.numeric(gsub(",", ".", data$y))
+```
+
+```{r}
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Data",
+       x = "X values",
+       y = "Y values")
+```
+We can see a plot displaying a set of data points with X values ranging from approximately 0 to 9 and Y values ranging from 0 to 40. The data points appear to be distributed in a somewhat curved pattern, and it looks like a sigmoid function. Overall, we can infer a general decline in Y values as X increases, with some variability at higher X values.
+
+------------------------------------------------------------------------
+
+2. Polynomial models for the data
+
+```{r}
+model_poly1 <- lm(y ~ x, data = data)
+model_poly2 <- lm(y ~ poly(x, 2, raw = TRUE), data = data)
+model_poly3 <- lm(y ~ poly(x, 3, raw = TRUE), data = data)
+model_poly4 <- lm(y ~ poly(x, 4, raw = TRUE), data = data)
+model_poly5 <- lm(y ~ poly(x, 5, raw = TRUE), data = data)
+#The option raw = FALSE (which is the default) allows to use an orthogonal basis of polynomial.
+```
+
+
+```{r}
+summary(model_poly1)
+```
+
+2.1 Simple Linear Regression Model Summary
+
+A simple linear regression model (\( y \sim x \)) was fitted. The intercept and slope are highly significant (p-values of \( 2.58 \times 10^{-15} \) and \( 4.84 \times 10^{-11} \), respectively), with an **Adjusted R-squared** of **0.7842**, indicating that **78.42% of the variance in** \( y \) **is explained by** \( x \).
+
+- **Residual Standard Error**: 8.131  
+- **Residual Range**: -16.0611 to 12.2883 (suggesting moderate prediction errors)  
+- **Overall Model Significance**:  
+  - **F-statistic**: 106.4  
+  - **p-value**: \( 4.842 \times 10^{-11} \)  
+
+Despite its statistical significance, the linear fit may not fully capture the **sigmoid-like pattern** observed in the scatter plot.
+
+```{r}
+summary(model_poly2)
+
+```
+2.2 Quadratic Regression Model Summary
+
+A **quadratic regression model** (\( y \sim x^2 \)) was fitted. The intercept and both polynomial terms are highly significant (**p-values** of \( 5.11 \times 10^{-16} \), \( 1.93 \times 10^{-8} \), and \( 3.53 \times 10^{-5} \), respectively). The **Adjusted R-squared** is **0.8826**, meaning that **88.26% of the variance in** \( y \) **is explained by** \( x \).
+
+- **Residual Standard Error**: 5.998  
+- **Residual Range**: -9.7881 to 11.9018 (indicating smaller prediction errors compared to the linear model)  
+- **Overall Model Significance**:  
+  - **F-statistic**: 110  
+  - **p-value**: \( 1.055 \times 10^{-13} \)  
+
+The inclusion of the quadratic term improves the fit, capturing more variance than the linear model. This suggests that a **nonlinear relationship** better describes the data.
+
+
+```{r}
+summary(model_poly3)
+```
+2.3 Cubic Regression Model Summary
+
+A **cubic regression model** (\( y \sim x^3 \)) was fitted. The **intercept** is highly significant (**p-value**: \( 2.51 \times 10^{-11} \)), but only the cubic term shows marginal significance (**p-value**: 0.0507), while the linear and quadratic terms are not significant (**p-values**: 0.1637 and 0.2656, respectively). The **Adjusted R-squared** is **0.895**, indicating that **89.5% of the variance in** \( y \) **is explained by** \( x \).
+
+- **Residual Standard Error**: 5.672  
+- **Residual Range**: -9.8309 to 9.5078  
+- **Overall Model Significance**:  
+  - **F-statistic**: 83.4  
+  - **p-value**: \( 1.823 \times 10^{-13} \)  
+
+While the cubic model slightly improves the fit compared to the quadratic model, the **higher-order terms are not strongly significant**, suggesting that the added complexity may not be fully justified.
+
+```{r}
+summary(model_poly4)
+```
+2.4 4th degree polynomial Regression Model Summary
+
+A **4th degree polynomial regression model** (\( y \sim x^4 \)) was fitted. All terms, including the intercept and polynomial coefficients, are **highly significant** (**p-values**: \( 2.67 \times 10^{-7} \), \( 2.78 \times 10^{-4} \), \( 2.59 \times 10^{-6} \), \( 2.08 \times 10^{-6} \), and \( 4.82 \times 10^{-6} \), respectively). The **Adjusted R-squared** is **0.9534**, indicating that **95.34% of the variance in** \( y \) **is explained by** \( x \).
+
+- **Residual Standard Error**: 3.778  
+- **Residual Range**: -6.4553 to 7.5950 (indicating lower prediction errors compared to previous models)  
+- **Overall Model Significance**:  
+  - **F-statistic**: 149.4  
+  - **p-value**: \( < 2.2 \times 10^{-16} \)  
+
+The 4th degree polynomial model provides a **substantially better fit** than lower-degree models, capturing more of the variance in \( y \). However, the inclusion of higher-degree terms may lead to overfitting.
+
+
+```{r}
+summary(model_poly5)
+```
+2.5 5th degree polynomial Regression Model Summary
+
+A **5th degree  regression model** (\( y \sim x^5 \)) was fitted. The intercept and lower-degree polynomial terms (**up to \( x^3 \)**) are **statistically significant** (**p-values**: \( 0.000212 \), \( 0.001728 \), \( 0.001631 \), and \( 0.012793 \), respectively). However, the **\( x^4 \) term is marginally significant** (\( p = 0.064841 \)), and the **\( x^5 \) term is not significant** (\( p = 0.180188 \)), suggesting that the highest-order term may not contribute substantially to model performance.
+
+- **Adjusted R-squared**: **0.955**, meaning **95.5% of the variance in** \( y \) **is explained by** \( x \).
+- **Residual Standard Error**: **3.711**, slightly lower than the 4th degree model.
+- **Residual Range**: -5.6505 to 8.3955.
+- **Overall Model Significance**:  
+  - **F-statistic**: 124.2  
+  - **p-value**: \( 2.418 \times 10^{-16} \)  
+
+While this model provides a **slightly better fit** than the 4th degree model, the **lack of significance in the highest-order terms** suggests potential **overfitting**.
+
+
+2.6 Choosing best polynomial model
+
+When evaluating all the polynomial models, we would choose the polynomial model with degree 4 (model_poly4) as the best fit for this data. The two best models are the ones with degree 4 and degree 5. Analyzing these two models, we have the following statistics:
+
+Degree 4:
+Adjusted R-squared: 0.9534
+p-value: < 2.2e-16
+
+Degree 5:
+Adjusted R-squared: 0.955
+p-value: 2.418e-16
+
+We can see that both models perform exceptionally well, with the 4th and 5th polynomial models being the best ones in terms of R-squared and p-value by far. The Adjusted R-squared values are very close, with the 5th-degree model having a slightly higher value (0.955) compared to the 4th-degree model (0.9534), indicating that both explain a high proportion of the variance in the data. However, the 4th-degree polynomial has a lower p-value (< 2.2e-16) compared to the 5th-degree model (2.418e-16), suggesting greater statistical significance.
+
+Additionally, if we take a look at the terms in both models, we can see that all terms in the 4th-degree model are highly significant (p < 0.001), indicating that each term contributes meaningfully to the model. In contrast, in the 5th-degree model, the 4th-degree term is only marginally significant (p = 0.06), and the 5th-degree term is not significant at all (p = 0.18), suggesting that the additional complexity of the 5th-degree model may not be justified. Therefore, we think that the 4th-degree polynomial provides the optimal balance of fit and complexity for this data.
+
+```{r}
+ggplot(data, aes(x = x, y = y)) +
+  geom_point(size = 2) +
+  stat_smooth(method = "lm", formula = y ~ x, aes(color = "red"), se = FALSE) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2, raw = TRUE), aes(color = "blue"), se = FALSE) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 3, raw = TRUE), aes(color = "green"), se = FALSE) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 4, raw = TRUE), aes(color = "purple"), se = FALSE) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 5, raw = TRUE), aes(color = "orange"), se = FALSE) +
+  labs(title = "Polynomial Regression Models",
+       x = "X values",
+       y = "Y values",
+       color = "Model")
+```
+
+------------------------------------------------------------------------
+
+3. Fitting non-linear model
+
+The polynomial model that best fits the data is the one with degree 4. Now, we aim to fit a non-linear model to the data. Given that the shape of the data resembles a logistic function, we will use a logistic model, which should fit well with appropriate starting parameters. For this purpose, we have selected the following initial values:
+
+A = 45: This approximates the maximum value observed for the Y variable.
+tau = 4: This is roughly the X value (around 4) where we observe a "midpoint" for the sigmoid function.
+gamma = -1: Since the Y-values decrease as X increases, we chose a negative gamma. We opted for a low magnitude to avoid an excessively steep curve.
+
+```{r}
+nlm1 <- nls(y ~ A / (1 + exp(-gamma * (x - tau))), 
+            data = data,
+            start = c(A = 45, gamma = -1, tau = 4))
+
+summary(nlm1)
+```
+
+ **Key Findings**
+- **All parameters are highly significant** (\( p < 0.001 \)), indicating that \( A \), \( \gamma \), and \( \tau \) meaningfully contribute to the model.
+- **Parameter estimates:**
+  - \( A = 41.9323 \) (asymptotic maximum value)
+  - \( \gamma = -2.0781 \) (growth rate)
+  - \( \tau = 4.1276 \) (inflection point)
+- **Residual Standard Error**: **3.421** (lower than polynomial models, suggesting better fit)
+- **Convergence achieved** in **9 iterations**, with a **tolerance of \( 2.122 \times 10^{-6} \)**.
+
+
+ **Comparison to Polynomial Models**
+- This model likely generalizes better than the 4th or 5th degree polynomial models, as it avoids overfitting high-degree terms.
+- The **logistic curve structure** suggests that \( y \) follows an **S-shaped trend**, making it a good candidate for capturing saturation effects.
+
+```{r}
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  geom_smooth(
+    method = "nls", 
+    se = FALSE, 
+    color = "#E69F00",
+    formula = y ~ A / (1 + exp(-gamma * (x-tau))), 
+    method.args = list(start = c(A = 45, gamma = -1, tau = 4))
+  ) +
+  labs(title = "Sigmoid Model Fit", x = "x", y = "y") +
+  theme_minimal()
+```
+
+3.1 Ploting the 4-th degree model and the non-lineal model.
+```{r}
+ggplot(data, aes(x = x, y = y)) +
+  geom_point(size = 2) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 4, raw = TRUE), color = "red", se = FALSE) +
+  geom_smooth(
+    method = "nls", 
+    se = FALSE, 
+    color = "#E69F00",
+    formula = y ~ A / (1 + exp(-gamma * (x-tau))), 
+    method.args = list(start = c(A = 45, gamma = -1, tau = 4))
+  ) +
+  labs(title = "Polynomial Regression Models",
+       x = "X values",
+       y = "Y values")
+```
+
+3.2 **Comparison of Models**  
+The logistic model demonstrates better performance compared to the polynomial models:  
+
+1. **Lower Residual Standard Error**: With an RSE of **3.421** (compared to **3.778** for the 4th degree polynomial model), the logistic model provides more accurate predictions.  
+2. **Statistically Significant Parameters**: All estimated parameters are **highly significant** and align well with the expected behavior of a logistic curve, making the model more interpretable.  
+3. **Better Generalization**: The logistic model retains **more degrees of freedom (27 vs. 25)**, suggesting a **simpler structure** with a lower risk of overfitting.
+
+------------------------------------------------------------------------
+
+4. Calculating confidence intervals at 95 for 4th-degree polynomial model.
+
+```{r}
+new_data <- data.frame(x = 1:10)
+conf_intervals_poly4 <- predict(model_poly4, newdata = new_data, 
+                               interval = "confidence", level = 0.95)
+pred_intervals_poly4 <- predict(model_poly4, newdata = new_data, 
+                               interval = "prediction", level = 0.95)
+```
+
+Confidence intervals for the mean response at new x-values from 1 to 10
+Prediction intervals for new observations at the same x-values
+Both at a 95% confidence level
+
+```{r}
+results_poly4 <- data.frame(
+  x = 1:10,
+  fit = conf_intervals_poly4[,"fit"],
+  conf_lower = conf_intervals_poly4[,"lwr"],
+  conf_upper = conf_intervals_poly4[,"upr"],
+  pred_lower = pred_intervals_poly4[,"lwr"],
+  pred_upper = pred_intervals_poly4[,"upr"]
+)
+```
+Fitted values from the model
+Lower and upper bounds of the confidence intervals
+Lower and upper bounds of the prediction intervals
+```{r}
+ggplot() +
+  geom_ribbon(data = results_poly4, aes(x = x, ymin = pred_lower, ymax = pred_upper), 
+              alpha = 0.2, fill = "blue") +
+  geom_ribbon(data = results_poly4, aes(x = x, ymin = conf_lower, ymax = conf_upper), 
+              alpha = 0.3, fill = "red") +
+  geom_line(data = results_poly4, aes(x = x, y = fit), color = "red", size = 1) +
+  geom_point(data = data, aes(x = x, y = y)) +
+  labs(title = "Polynomial Model (4th degree)",
+       subtitle = "With 95% confidence (red) and prediction (blue) intervals",
+       x = "x", y = "y") +
+  theme_minimal()
+```
+
+4.1 Analysis
+
+The red band represents the 95% confidence interval for the mean response, showing where we expect the true average y-value to be at each x-value. It's narrower because it only accounts for uncertainty in estimating the regression function.
+The light blue band shows the 95% prediction interval, indicating the range where we expect new individual observations to fall. It's wider than the confidence interval because it includes both the uncertainty in the regression function and the random variation of individual observations around the mean.
+The intervals are widest at the extremes of the x-range and narrowest where data is abundant, reflecting greater uncertainty in predictions where less data is available.
+
+4.2 Calculating confidence intervals at 95 for non-linear model with Parametric Bootstrap.
+
+```{r}
+f_hat <- function(beta, x){ 
+  beta[1]/(1 + exp(-beta[2] * (x - beta[3])))
+}
+beta_hat <- coef(nlm1)
+# New data
+x_new <- 1:10
+#Get pred for new data
+f_new <- f_hat(beta_hat, x_new)
+df_mc <- data.frame(x = x_new, f = f_new)
+```
+
+Define a logistic function with 3 parameters: asymptote (beta[1]), growth rate (beta[2]), and inflection point (beta[3]). It gets the estimated parameters from (nlm1) model, creates a sequence of new x values (1 through 10), calculates predictions for these values, and stores them in a data frame.
+
+
+```{r}
+#Parameters
+n_boot <- 1000
+alpha <- 0.05
+
+n <- nrow(data)
+sigma_hat <- sigma(nlm1)
+
+x <- data$x 
+
+y_hat_ref <- f_hat(beta_hat, x)
+```
+
+Define number of bootstrap samples (1000), significance level (5%), sample size (n), estimated error standard deviation (sigma_hat), and calculates the fitted values for the original data.
+
+```{r}
+res <- mclapply(1:n_boot, function(b) {
+  y_b <- y_hat_ref + sigma_hat * rnorm(n) #Add random error to create bootstrap
+  
+  #For each one the nls () i used again to fit the logistic model
+  nlm1_b <- nls(y_b ~ f_hat(beta, x), start = list(beta = beta_hat))
+  
+  beta_b <- coef(nlm1_b)
+  f_b <- f_hat(beta_b, x_new)
+  
+  y_b_new <- f_b + rnorm(length(x_new), 0, sigma_hat)
+  
+  return(list(f_hat = f_b, y_hat = y_b_new))
+})
+```
+
+This part performs the parametric bootstrap:
+
+- Generating 1000 synthetic datasets by adding random normal errors to the fitted values.
+- For each synthetic dataset, fitting the same nonlinear model
+- Computing predictions at the new x values using the bootstrap parameter estimates
+- Simulating new observations by adding random errors to these predictions
+- Returning both the fitted curve values and simulated new observations
+
+```{r}
+res_valid <- res[!sapply(res, function(x) any(is.na(x$f_hat)))]
+
+f_hat_boot <- do.call(rbind, lapply(res_valid, function(x) x$f_hat))
+conf_quantiles <- apply(f_hat_boot, 2, quantile, c(alpha/2, 1-alpha/2), na.rm = TRUE)
+
+y_hat_boot <- do.call(rbind, lapply(res_valid, function(x) x$y_hat))
+pred_quantiles <- apply(y_hat_boot, 2, quantile, c(alpha/2, 1-alpha/2), na.rm = TRUE)
+
+df_mc$lwr_conf <- conf_quantiles[1,] #Lower bound of conf interval
+df_mc$upr_conf <- conf_quantiles[2,] #Upper bound of conf interval
+df_mc$lwr_pred <- pred_quantiles[1,] #Lowr bound of pred interval
+df_mc$upr_pred <- pred_quantiles[2,] #Upper bound of pred interval
+```
+
+Calculates the empirical confidence and prediction intervals by:
+
+- Filtering out any bootstrap samples that produced NAs (though the line is commented)
+- Extracting the fitted curve values and simulated observations from all valid bootstraps
+- Computing the 2.5% and 97.5% quantiles to form 95% intervals
+- Adding these interval bounds to the data frame
+
+```{r}
+df <- n - length(beta_hat)  # Degrees of freedom
+rq <- qt(c(alpha/2, 1-alpha/2), df) / qnorm(c(alpha/2, 1-alpha/2))
+
+# Remove bias
+df_mc$lwr_conf <- f_new + rq[1] * (df_mc$lwr_conf - f_new)
+df_mc$upr_conf <- f_new + rq[2] * (df_mc$upr_conf - f_new)
+df_mc$lwr_pred <- f_new + rq[1] * (df_mc$lwr_pred - f_new)
+df_mc$upr_pred <- f_new + rq[2] * (df_mc$upr_pred - f_new)
+
+print(df_mc)
+```
+Apply the bias correction:
+
+It first calculates degrees of freedom (sample size minus number of parameters) and computes correction factors using the ratio of t-distribution to normal distribution quantiles. It then adjusts each interval bound.
+
+```{r}
+ggplot() +
+  geom_ribbon(data = df_mc, aes(x = x, ymin = lwr_pred, ymax = upr_pred), 
+              alpha = 0.2, fill = "blue") +
+  geom_ribbon(data = df_mc, aes(x = x, ymin = lwr_conf, ymax = upr_conf), 
+              alpha = 0.3, fill = "green") +
+  geom_line(data = df_mc, aes(x = x, y = f), color = "green", size = 1) +
+  geom_point(data = data, aes(x = x, y = y)) +
+  labs(title = "Logistic Model with Bootstrap Intervals",
+       subtitle = "95% confidence (green) and prediction (blue) intervals",
+       x = "x", y = "y") +
+  theme_minimal()
+```
+ Components and Analysis
+
+- Blue shaded region showing the prediction intervals (wider)
+- Green shaded region showing the confidence intervals (narrower)
+- Green line showing the fitted curve
+- Black points showing the original data
+
+The x values range from 1 to 10
+The fitted values (f) follow a logistic curve that starts high (around 40) and declines to near 0
+The confidence intervals (lwr_conf, upr_conf) are consistently narrower than the prediction intervals (lwr_pred, upr_pred).
+
+In the graph we can see:
+
+The logistic model that starts high and declines to an asymptote near zero
+Narrower green confidence bands around the mean response.
+Wider blue prediction bands that account for individual observation variability
+The raw data points, which generally follow the model but with scatter
+The wider prediction intervals at the asymptotes (both upper and lower), which is typical for logistic models
+
+Some parts of the green confidence band appear narrower than expected because of the nature of bootstrap resampling and the particular characteristics of logistic models.Can occur because of:
+
+- Limited Data in Transition Regions.
+- Bootstrap Assumptions: The parametric bootstrap assumes that the fitted model is correctly specified. If there are subtle misspecifications, the bootstrap might underestimate uncertainty in some regions.
+Stability of Parameter Estimates: For logistic models, certain parameter combinations can be more stable across bootstrap samples, leading to less variation in predictions at particular x-values.
+
+
+4.2 Calculating confidence intervals at 95 for non-linear model with delta method.
+
+```{r}
+# Define your logistic function
+f_hat <- function(beta, x){ 
+  beta[1]/(1 + exp(-beta[2] * (x - beta[3])))
+}
+
+# Get parameter estimates and variance-covariance matrix from your fitted model
+beta_hat <- coef(nlm1)
+vcov_matrix <- vcov(nlm1)
+
+# New data points for prediction
+x_new <- seq(1, 10, by=0.1)
+
+# Calculate gradient of the function with respect to parameters
+# Using symbolic differentiation
+f_prime <- deriv(~ beta1/(1 + exp(-beta2 * (x - beta3))), 
+                c("beta1", "beta2", "beta3"), 
+                function(beta1, beta2, beta3, x){})
+
+# Compute function values and gradients at new points
+predictions <- numeric(length(x_new))
+gradients <- matrix(0, nrow=length(x_new), ncol=length(beta_hat))
+
+for(i in 1:length(x_new)) {
+  result <- f_prime(beta_hat[1], beta_hat[2], beta_hat[3], x_new[i])
+  predictions[i] <- result
+  gradients[i,] <- attr(result, "gradient")
+}
+
+# Calculate the variance of predictions using the delta method
+# For each new point, compute gradient'*V*gradient
+GS <- numeric(length(x_new))
+for(i in 1:length(x_new)) {
+  GS[i] <- t(gradients[i,]) %*% vcov_matrix %*% gradients[i,]
+}
+
+# Compute confidence intervals
+alpha <- 0.05
+n <- nrow(data)
+df <- n - length(beta_hat)  # Degrees of freedom
+delta_f <- sqrt(GS) * qt(1-alpha/2, df)
+
+# Compute prediction intervals 
+# Adding the variance of the error term
+sigma_hat <- sigma(nlm1)
+delta_y <- sqrt(GS + sigma_hat^2) * qt(1-alpha/2, df)
+
+# Create data frame with intervals
+df_delta <- data.frame(
+  x = x_new,
+  f = predictions,
+  lwr_conf = predictions - delta_f,
+  upr_conf = predictions + delta_f,
+  lwr_pred = predictions - delta_y,
+  upr_pred = predictions + delta_y
+)
+
+# Plot
+ggplot() +
+  geom_point(data = data, aes(x = x, y = y)) +
+  geom_ribbon(data = df_delta, aes(x = x, ymin = lwr_pred, ymax = upr_pred), 
+              alpha = 0.1, fill = "blue") +
+  geom_ribbon(data = df_delta, aes(x = x, ymin = lwr_conf, ymax = upr_conf), 
+              alpha = 0.2, fill = "green") +
+  geom_line(data = df_delta, aes(x = x, y = f), color = "green", size = 1) +
+  labs(title = "Logistic Model with Delta Method Intervals",
+       subtitle = "95% confidence (green) and prediction (blue) intervals",
+       x = "x", y = "y") +
+  theme_minimal()
+```
+
+Analysis of delta method
+
+The delta method produces similar intervals to the bootstrap method but with notable improvements:
+
+Smoother bands: The confidence and prediction intervals appear more continuous and smoother because the delta method uses analytical calculations rather than discrete resampling.
+
+Consistent shape: Unlike bootstrap intervals which can sometimes appear irregularly narrow in certain regions, the delta method produces more evenly distributed uncertainty bands.
+
+Computational efficiency: The delta method requires only one model fit and matrix calculations, making it much faster than bootstrap which requires hundreds or thousands of refits.
+
+Similar conclusions: Both methods confirm the logistic pattern with high values around 40 at low x-values that decline to near 0 at higher x-values. Both methods show wider intervals at the extremes of the data range where prediction uncertainty is naturally higher.
+
+----
+----
+
+# S&P500 daily return
+
+```{r test-config, message = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(aricode)
+library(mixtools)
+library(MASS)
+theme_set(theme_bw())
+```
+
+In this exercise, we study data from the S&P 500 index, a stock market index tracking the performance of 500 large companies listed on stock exchanges in the United States. The `sp500_history.csv` file contains data about the daily activity of the S&P 500 index, such as the opening price, closing price, and the volume of trade. The daily data covers every trading day from January 3rd, 2007 to February 2nd, 2024.
+
+1.  Load the dataset `sp500_history.csv` into a *data frame* and add a column that computes the daily return for each days.
+
+Here, we use the definition of daily return from the outline: $$
+\text{daily return} = Close - Open
+$$
+
+```{r}
+# Load the data into a dataframe
+sp500 <- read_csv('data/sp500_history.csv',show_col_types = FALSE)
+head(sp500, 5)
+# Calculate daily return
+calculate_daily_returns <- function(open_prices, close_prices) {
+  # Calculate returns as the difference between closing and opening on the same day
+  returns <- (close_prices - open_prices)
+  return(returns)
+}
+
+# Apply the function to calculate returns
+sp500$daily_return <- calculate_daily_returns(sp500$Open, sp500$Close)
+
+# Display the first few rows to verify
+head(sp500, 5)
+```
+
+------------------------------------------------------------------------
+
+2: We propose to model the daily return as a sample from a normal population. Write the model and use *R* to fit it to the data. What do you think of this model?
+
+Here, we propose a model where we assume daily returns are iid samples from a normal distribution: $$
+D_i \sim \mathcal{N}(\mu, \sigma^2)
+$$ Where $D_i$ is the daily return at day $i$, $\mu$ and $\sigma$ are unknown mean and variance parameters of the normal. We use the Maximum Likelihood Estimator (MLE) to calculate estimators $\hat{\mu}$ and $\hat{\sigma}$.
+
+To analyze the results, we make Q-Q plot to compare the data to theoretical quantiles, and we plot the density curve against a histogram of our data. We also track log-likelihood and AIC/BIC metrics to assess goodness-of-fit and compare performance against other models.
+
+```{r}
+# Question 2: Fit a normal distribution to daily returns
+
+# Use the properly defined daily returns (already calculated in Question 1)
+returns <- sp500$daily_return
+set.seed(42)
+# Fit the model by estimating parameters
+mu <- mean(returns)  # Sample mean - Maximum Likelihood Estimator (MLE) for μ
+sigma <- sd(returns)  # Sample standard deviation - MLE for σ
+# Print the parameter estimates
+cat("Estimated mean (μ):", mu, "\n")
+cat("Estimated standard deviation (σ):", sigma, "\n")
+
+# Calculate the log-likelihood for normal distribution
+n <- length(returns)
+log_likelihood <- sum(dnorm(returns, mean = mu, sd = sigma, log = TRUE))
+
+# Calculate AIC and BIC
+# AIC = -2*log-likelihood + 2*k, where k is the number of parameters (2 for normal: μ and σ)
+AIC <- -2 * log_likelihood + 2 * 2
+# BIC = -2*log-likelihood + k*log(n)
+BIC <- -2 * log_likelihood + 2 * log(n)
+
+# Print AIC and BIC
+cat("Log-Likelihood", log_likelihood, "\n")
+cat("AIC:", AIC, "\n")
+cat("BIC:", BIC, "\n")
+
+# Evaluate the model fit
+# Create a histogram with normal density overlay to visually assess fit
+hist(returns, freq = FALSE, breaks = 30, 
+     main = "Histogram of Daily Returns with Normal Fit",
+     xlab = "Daily Return")
+# Add the normal density curve using our estimated parameters
+curve(dnorm(x, mean = mu, sd = sigma), 
+      add = TRUE, col = "red", lwd = 2)
+# Add a legend
+legend("topright", legend = "Normal Density", col = "red", lwd = 2)
+
+# QQ plot to assess normality
+qqnorm(returns)
+qqline(returns, col = "red")
+```
+
+**Interpretation of the results**
+
+**Histogram Analysis**
+
+The histogram reveals several key features:
+
+-   The distribution is centered near zero
+-   The peak is higher than the normal curve suggests
+-   Extreme values appear more frequently than predicted by a normal distribution
+-   Overall shape shows approximate symmetry but with heavier tails
+
+**Quantile-Quantile (Q-Q) Plot Analysis**
+
+The Q-Q plot provides clear evidence of non-normality:
+
+-   **S-shaped pattern**: Classic indicator of a heavy-tailed distribution
+-   **Tail deviations**: Points curve sharply upward at the right tail and downward at the left tail
+-   **Center fit**: Returns near the mean follow the normal distribution reasonably well
+
+**Conclusion**
+
+The normal distribution model is inadequate for modeling S&P 500 daily returns. The data exhibits fat tails where extreme market movements occur more frequently than a normal distribution would predict. This suggests that risk measures based on normal distribution assumptions would underestimate the probability of large price movements in both directions.
+
+------------------------------------------------------------------------
+
+3.  Instead of a single normal, we now propose to use a mixture of normals with $p$ components. Write the corresponding models and use *R* to fit them to the data for all values of $p$ between $2$ and $6$. Discuss the results and compare them with the model of Question
+    1.  
+
+```{r}
+
+# Set up plotting parameters
+par(mfrow = c(3, 2))  # 3 rows, 2 columns for plots
+# Set maximum iterations
+max_iterations <- 3000
+# Set seed
+set.seed(42)
+
+# Initialize vectors to store results
+components <- 2:6
+log_likelihoods <- numeric(length(components))
+aic_values <- numeric(length(components))
+bic_values <- numeric(length(components))
+
+# Fit and plot models with 2 to 6 components
+for (i in 1:length(components)) {
+  p <- components[i]
+  
+  # Fit mixture model with p components
+  mix_model <- normalmixEM(
+    returns, 
+    k = p,
+    maxit = max_iterations  # Increased maximum iterations
+  )
+  
+  # Plot the fitted model with explicit parameter names
+  plot(mix_model, which = 2, 
+       main2 = paste(p, "Component Normal Mixture"),
+       xlab2 = "Returns")
+  
+  # Calculate AIC and BIC
+  n_params <- 3*p - 1
+  n_obs <- length(returns)
+  
+  # Store results
+  log_likelihoods[i] <- mix_model$loglik
+  aic_values[i] <- -2 * mix_model$loglik + 2 * n_params
+  bic_values[i] <- -2 * mix_model$loglik + log(n_obs) * n_params
+}
+
+# Reset plotting parameters
+par(mfrow = c(1, 1))
+
+# Create comparison table
+results_df <- tibble(
+  Components = components,
+  LogLikelihood = log_likelihoods,
+  AIC = aic_values,
+  BIC = bic_values
+)
+
+# Display the table
+results_df
+```
+
+**Interpretation of the results** Based on the mixture model analysis, here's the final markdown table showing the results for 2-6 components:
+
+| Components | LogLikelihood |   AIC    |   BIC    |
+|:----------:|:-------------:|:--------:|:--------:|
+|     2      |   -19038.67   | 38087.33 | 38119.17 |
+|     3      |   -18972.05   | 37960.10 | 38011.04 |
+|     4      |   -18969.56   | 37961.11 | 38031.14 |
+|     5      |   -18963.33   | 37954.67 | 38043.80 |
+|     6      |   -18964.20   | 37962.39 | 38070.62 |
+
+**Analysis of Mixture Models**
+
+Looking at the results from our mixture model analysis, we can draw several important comparisons with the single normal distribution model from Question 2.
+
+**Model Fit Comparison**
+
+The log-likelihood values provide a direct measure of how well each model fits the data:
+
+-   **Single Normal Distribution**: This model serves as our baseline and has a substantially lower log-likelihood than any of the mixture models, indicating a poorer fit.
+
+-   **Mixture Models**: All mixture models show significantly improved log-likelihood values compared to the single normal distribution, with the 5-component model achieving the highest log-likelihood (18963.33).
+
+**Model Selection Criteria**
+
+When considering both fit and complexity, the AIC and BIC values help us identify the optimal model:
+
+-   The **3-component mixture** has the second-lowest AIC (37960.10) and the lowest BIC (38011.04), suggesting it offers an excellent balance between fit and parsimony.
+
+-   The **5-component mixture** has the lowest AIC (37954.67) but a higher BIC due to its increased complexity.
+
+This pattern suggests that while adding components beyond 3 continues to improve the fit slightly, the **gain may not justify the increased model complexity**.
+
+**Final conclusion**
+
+From a financial modeling perspective, the mixture models offer a more realistic representation of return behavior:
+
+-   The 3-component mixture appears to be the **most practical choice**, offering substantial improvement over the normal distribution without excessive complexity.
+
+-   The model can better capture the risk of extreme market movements, which is critical for risk management and derivative pricing.
+
+The **clear superiority of mixture models over the single normal distribution** confirms our initial assessment that the normal distribution is inadequate for modeling S&P 500 daily returns.
+
+------------------------------------------------------------------------
+
+4.  As a third and last model, we propose to model the daily return as coming from a location-scale family of Student distributions, which is a model defined by the collection of densities $$f_{\nu,m,a}(x) = \frac{\Gamma\big(\frac{\nu+1}{2}\big)}{\sqrt{\pi \nu a^2}\Gamma\big(\frac{\nu}{2}\big)}\Bigg(1+\frac{(x-m)^2}{\nu a^2} \Bigg)^{-\frac{\nu+1}{2}}$$ where $\Gamma$ is the Gamma function and $\theta=(\nu,m,a) \in \mathbb{R}_+^*\times \mathbb{R}\times \mathbb{R}_+^*$ is the parameter.
+
+4.1 What is the motivation for considering this model?
+
+We have observed in the QQ plot of question 2 that our return data exhibits significantly heavier tails than the normal distribution. The empirical SP500 returns show more extreme values than would be expected under Gaussian assumptions, particularly in both the positive and negative tails.
+
+The Student t-distribution naturally addresses this characteristic through its heavier tail behavior, making it especially suitable for financial return modeling. Furthermore, the location-scale family of Student t-distributions offers several advantages:
+
+1.  **Fat tail modeling**: The parameter $\nu$ (degrees of freedom) directly controls the tail behavior - smaller values of $\nu$ produce heavier tails that can better capture extreme market movements. As $\nu \to \infty$, the distribution approaches the normal distribution, providing a smooth nesting of the Gaussian case.
+
+2.  **Flexible parameterization**: The complete parameter set $\theta = (\nu, m, a)$ provides distinct control over different aspects of the distribution:
+
+    -   $\nu$ = degrees of freedom: Controls the heaviness of the tails and excess kurtosis
+    -   $m$ = location parameter: Controls the center of the distribution (related to the mean for $\nu > 1$)
+    -   $a$ = scale parameter: Controls the dispersion (related to the standard deviation for $\nu > 2$)
+
+3.  **Theoretical foundation**: Unlike the mixture of normals approach which is essentially a non-parametric approximation, the Student t-distribution has a strong theoretical basis, arising naturally from Bayesian considerations of uncertainty in variance estimation.
+
+4.  **Parsimony**: With only three parameters, this model is significantly more parsimonious than the mixture of normals approach (which required 3p-1 parameters for p components). This reduces the risk of overfitting while still capturing the essential non-normal characteristics of the return distribution.
+
+5.  **Established use in finance**: The t-distribution has become a standard tool in financial econometrics precisely because it addresses the empirical properties of asset returns while maintaining analytical tractability.
+
+The proposed model thus provides an excellent balance between the simplicity of a single distribution and the necessary flexibility to capture the empirical characteristics of financial returns, particularly the fat-tailed behavior that is crucial for proper risk assessment.
+
+4.2 Propose an algorithm for estimating the parameter of this model and use it to fit this model to the data.
+
+This algorithm fits a Student t-distribution to the daily return data using maximum likelihood estimation through direct optimization. Here's what it does:
+
+1.  **Log-likelihood function**: Defines the mathematical formula for the Student t-distribution's log-likelihood, which measures how well the distribution with parameters (nu, m, a) explains the observed data.
+
+2.  **Parameter meaning**:
+
+    -   `nu`: Degrees of freedom (controls the heaviness of tails)
+    -   `m`: Location parameter (similar to mean)
+    -   `a`: Scale parameter (related to standard deviation)
+
+3.  **Optimization approach**: Uses the L-BFGS-B algorithm to find the parameters that maximize the log-likelihood (by minimizing the negative log-likelihood):
+
+    -   Starts with sensible initial values (median for location, MAD for scale)
+    -   Sets reasonable parameter constraints (nu \> 1 ensures finite variance)
+    -   Searches parameter space to find optimal values
+
+4.  **Model evaluation**: Calculates AIC and BIC metrics to assess model fit quality and enable comparison with other distribution fits.
+
+```{r}
+# Student t-Distribution Parameter Estimation using Direct Optimization
+
+# Define the Student t log-likelihood function
+student_log_likelihood <- function(params, data) {
+  nu <- params[1]
+  m <- params[2]
+  a <- params[3]
+  
+  # Ensure parameters are in valid ranges
+  if(nu <= 0 || a <= 0) return(-Inf)
+  
+  # Calculate log-likelihood
+  sum(
+    lgamma((nu + 1) / 2) - lgamma(nu / 2) - 0.5 * log(pi * nu * a^2) - 
+      ((nu + 1) / 2) * log(1 + ((data - m)^2) / (nu * a^2))
+  )
+}
+
+# Negative log-likelihood for minimization
+neg_student_log_likelihood <- function(params, data) {
+  -student_log_likelihood(params, data)
+}
+
+# Function to compute AIC and BIC
+compute_aic_bic <- function(loglik, k, n) {
+  aic <- -2 * loglik + 2 * k
+  bic <- -2 * loglik + log(n) * k
+  list(AIC = aic, BIC = bic)
+}
+
+# Direct optimization for Student t-distribution parameters
+fit_t_distribution <- function(data) {
+  # Initial guesses
+  init_m <- median(data)
+  init_a <- mad(data) * 1.4826  # MAD to SD conversion factor
+  init_nu <- 2  # Reasonable starting value
+  
+  # Optimize all parameters simultaneously
+  opt_result <- optim(
+    c(init_nu, init_m, init_a),
+    neg_student_log_likelihood,
+    method = "L-BFGS-B",
+    lower = c(1.0001, -Inf, 0.00001),  # nu > 1 for finite variance
+    upper = c(100, Inf, Inf),
+    control = list(maxit = 1000),
+    data = data
+  )
+  
+  # Extract parameters
+  nu <- opt_result$par[1]
+  m <- opt_result$par[2]
+  a <- opt_result$par[3]
+  loglik <- opt_result$value
+  
+  # Calculate AIC and BIC
+  n <- length(data)
+  k <- 3  # Number of parameters
+  metrics <- compute_aic_bic(loglik, k, n)
+  
+  # Return parameters and metrics
+  list(
+    nu = nu,
+    m = m,
+    a = a,
+    loglik = loglik,
+    AIC = metrics$AIC,
+    BIC = metrics$BIC,
+    convergence = opt_result$convergence
+  )
+}
+
+result <- fit_t_distribution(returns)
+print(result)
+```
+
+**Interpretation of the results**
+
+------------------------------------------------------------------------
+
+5.  Between all the previous models (the normal, the 5 mixture models, and the location-scale Student) which one do you choose? Explain your methodology.
+
+The following table summarizes the results:
+
+| Model     | Components | Parameters | LogLikelihood |   AIC    |   BIC    |
+|:----------|:----------:|:----------:|:-------------:|:--------:|:--------:|
+| Mixture   |     2      |     5      |   -19038.67   | 38087.33 | 38119.17 |
+| Mixture   |     3      |     8      |   -18972.05   | 37960.10 | 38011.04 |
+| Mixture   |     4      |     11     |   -18969.56   | 37961.11 | 38031.14 |
+| Mixture   |     5      |     14     |   -18963.33   | 37954.67 | 38043.80 |
+| Mixture   |     6      |     17     |   -18964.20   | 37962.39 | 38070.62 |
+| Normal    |     \-     |     2      |   -19719.20   | 39442.40 | 39455.13 |
+| Student t |     \-     |     3      |   -19032.66   | 38071.31 | 38090.41 |
+
+**Comparison Methodology**
+
+Our approach to model selection involves balancing:
+
+1.  **Goodness-of-fit**: Assessed through AIC and BIC metrics
+2.  **Model parsimony**: Examining the number of parameters required
+3.  **Theoretical justification**: Considering financial theory and interpretability
+
+**Results Analysis**
+
+-   Normal distribution: Provides a baseline fit but shows the poorest performance across all metrics (highest AIC/BIC values), confirming its failure to capture the heavy tails evident in the Q-Q plot.
+-   Mixture of normals (2-6 components):
+    -   The 3-component MM shows a substantial improvement over both the 2-component MM and the normal distribution.
+    -   The 4-component MM offers nearly identical performance to the 5-component model but with fewer parameters.
+    -   The 5-component MM achieves the lowest AIC (37954.67) among all models.
+    -   The 6-component MM performs worse than the 5-component model, suggesting we've reached a point of diminishing returns and potential overfitting.
+-   Location-scale Student t-distribution: Achieves considerably better fit than the normal distribution and comparable performance to the 2-component MM, but with fewer parameters.
+
+**Conclusion**
+
+Based on the comprehensive analysis, the **3-component Mixture Model represents the optimal choice** for modeling the SP500 returns. It achieves the best balance between fit quality and model complexity for these reasons:
+
+-   It has the second-lowest BIC value (38011.04), only slightly higher than the Student t, indicating good fit with appropriate penalty for complexity.
+-   Its AIC value (37960.10) is significantly better than the Student t model and only marginally higher than the 5-component MM.
+-   With 8 parameters, it achieves substantial improvement over the Student t (3 parameters) while avoiding the potential overfitting of the higher-component MMs.
+
+While the 5-component MM achieves the lowest AIC, the improvement over the 3-component model is minimal and comes at the cost of 6 additional parameters. The BIC, which penalizes complexity more heavily, clearly favors the 3-component model over the 5-component one.
+
+The Student t-distribution, while parsimonious with only 3 parameters, doesn't fit the data as well as the 3-component MM according to both AIC and BIC metrics. However, it **remains a strong contender if interpretability and theoretical foundation are prioritized over optimal statistical fit**.
+
+In essence, the 3-component MM offers the ideal balance - substantially better than both the normal and Student t distributions at capturing the complex distribution of returns while remaining significantly more parsimonious than the higher-component mixture models.
+
+------------------------------------------------------------------------
+
+6.  Is the expected daily return different than zero?
+
+We have seen that our data doesn't follow a normal distribution. As such, we use Wilcoxon rank test, since it is a non-parametric alternative to the paired t-test that **doesn't require the assumption of normality**. We can formulate our hypothesis test as follows:
+
+-   **Null Hypothesis** $H_0 : \mu=0$
+-   **Alternative Hypothesis** $H_1 : \mu ≠ 0$
+-   **Significance level**: $\alpha=0.05$ (95% confidence)
+
+```{r}
+mu0 = 0
+wilcox.test(returns, alternative = "two.sided", mu = mu0)
+```
+
+**Interpretation of the results**
+
+Here we see that the $p_{value} < \alpha$, therefore we can conclude that we have sufficient evidence to reject the null hypothesis at the 95% significance level. Therefore, we can say within confidence that $\mu ≠ 0$.
